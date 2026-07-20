@@ -210,7 +210,7 @@ void FileTransfer::sendNextBlock() {
         qDebug() << "[INFO] File transfer completed.";  
         return;
     }
-    const quint64 maxBlockSize = 128 * 1024;
+    const quint64 maxBlockSize = 1024 * 1024;
     QByteArray data = m_sendFile->read(maxBlockSize);
     if (data.isEmpty() && !m_sendFile->atEnd()) {
         qDebug() << "[ERROR] Read file error at offset " << m_sendOffset;
@@ -329,7 +329,7 @@ void FileTransfer::onReadyRead() {
 
         quint64 real_size = qFromBigEndian<quint64>(net_real_size);
         quint64 partSize = WFTheader::HEADERSIZE + real_size;
-        if(real_size > 128 * 1024) {
+        if(real_size > 1024 * 1024) {
             qDebug() << "[WARN] Invalid packet,skipping...";
             ctx.recvBuffer.remove(0,4);
             continue;

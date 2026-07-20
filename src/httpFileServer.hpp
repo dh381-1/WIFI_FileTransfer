@@ -11,7 +11,8 @@
 #include <QHash>
 #include <QWidget>
 
-class HttpFileServer : public QObject {
+class HttpFileServer : public QObject
+{
     Q_OBJECT
 public:
     explicit HttpFileServer(QObject *parent = nullptr);
@@ -24,6 +25,7 @@ public:
     QString shareDirectory() const { return m_shareDir; }
     void setShareDirectory(const QString &dir);
     bool selectAndSetShareDirectory(QWidget *parent = nullptr);
+
     quint16 serverPort() const { return m_server ? m_server->serverPort() : 0; }
 
 signals:
@@ -36,16 +38,26 @@ private slots:
     void onNewConnection();
     void onReadyRead();
     void onDisconnected();
+    void onBytesWritten(qint64 bytes);   
 
 private:
+    struct SendContext {
+        QFile* file = nullptr;
+        qint64 total = 0;
+        qint64 sent = 0;
+        QByteArray buffer;
+    };
+
     QTcpServer *m_server = nullptr;
     QString m_shareDir;
-    QHash<QTcpSocket*, QByteArray> m_buffers; 
+    QHash<QTcpSocket*, QByteArray> m_buffers;          
+    QHash<QTcpSocket*, SendContext> m_sendContexts;    
 
     void processRequest(QTcpSocket *socket, const QByteArray &request);
     void sendFile(QTcpSocket *socket, const QString &filePath);
     void sendError(QTcpSocket *socket, int code, const QString &msg);
     void sendDirectoryListing(QTcpSocket *socket);
+    void startNextChunk(QTcpSocket *socket);           
 };
 
-#endif 
+#endif

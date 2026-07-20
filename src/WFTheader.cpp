@@ -4,7 +4,7 @@
 WFTheader::WFTheader(quint64 offset, int seq, const char* fname, const char* fext) {
     this->seq = seq;
     this->offset = offset;
-    data_size = 131072; // 128KB
+    data_size = 1024 * 1024; // 1MB
     real_size = 0;
     total_size = 0;
     std::strncpy(file_name, fname, 127);

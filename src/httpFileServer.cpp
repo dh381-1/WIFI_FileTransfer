@@ -42,6 +42,15 @@ bool HttpFileServer::start(quint16 port, const QString &shareDir) {
 void HttpFileServer::stop() {
     if (!isRunning()) return;
     m_server->close();
+    for (auto it = m_sendContexts.begin(); it != m_sendContexts.end(); ++it) {
+        if (it.value().file) {
+            it.value().file->close();
+            delete it.value().file;
+        }
+        it.value().file = nullptr;
+    }
+    m_sendContexts.clear();
+
     for (auto socket : m_buffers.keys()) {
         socket->disconnectFromHost();
         socket->deleteLater();
@@ -74,7 +83,10 @@ void HttpFileServer::onNewConnection() {
     if (!client) return;
     connect(client, &QTcpSocket::readyRead, this, &HttpFileServer::onReadyRead);
     connect(client, &QTcpSocket::disconnected, this, &HttpFileServer::onDisconnected);
+    connect(client, &QTcpSocket::bytesWritten, this, &HttpFileServer::onBytesWritten);
     m_buffers.insert(client, QByteArray());
+    client->setSocketOption(QAbstractSocket::SendBufferSizeSocketOption, 8 * 1024 * 1024);
+    client->setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, 8 * 1024 * 1024);
 }
 
 void HttpFileServer::onReadyRead() {
@@ -91,11 +103,38 @@ void HttpFileServer::onReadyRead() {
 void HttpFileServer::onDisconnected() {
     QTcpSocket *socket = qobject_cast<QTcpSocket*>(sender());
     if (socket) {
+        if (m_sendContexts.contains(socket)) {
+            SendContext &ctx = m_sendContexts[socket];
+            if (ctx.file) {
+                ctx.file->close();
+                delete ctx.file;
+                ctx.file = nullptr;
+            }
+            m_sendContexts.remove(socket);
+        }
         m_buffers.remove(socket);
         socket->deleteLater();
     }
 }
 
+void HttpFileServer::onBytesWritten(qint64 bytes) {
+    Q_UNUSED(bytes);
+    QTcpSocket *socket = qobject_cast<QTcpSocket*>(sender());
+    if (!socket || !m_sendContexts.contains(socket)) return;
+
+    SendContext &ctx = m_sendContexts[socket];
+    if (ctx.sent < ctx.total) {
+        startNextChunk(socket);
+    } else {
+        qDebug() << "[HTTP] File sent completely:" << ctx.file->fileName() << "(" << ctx.total << " bytes)";
+        ctx.file->close();
+        delete ctx.file;
+        ctx.file = nullptr;
+        m_sendContexts.remove(socket);
+    }
+}
+
+// ---------- 请求处理 ----------
 void HttpFileServer::processRequest(QTcpSocket *socket, const QByteArray &request) {
     QList<QByteArray> lines = request.split('\n');
     if (lines.isEmpty()) return;
@@ -158,28 +197,76 @@ void HttpFileServer::sendDirectoryListing(QTcpSocket *socket) {
 }
 
 void HttpFileServer::sendFile(QTcpSocket *socket, const QString &filePath) {
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly)) {
+    // 如果已经存在该 socket 的发送上下文，先清理
+    if (m_sendContexts.contains(socket)) {
+        SendContext &old = m_sendContexts[socket];
+        if (old.file) {
+            old.file->close();
+            delete old.file;
+            old.file = nullptr;
+        }
+        m_sendContexts.remove(socket);
+    }
+
+    QFile *file = new QFile(filePath);
+    if (!file->open(QIODevice::ReadOnly)) {
         sendError(socket, 500, "Internal Server Error");
+        delete file;
         return;
     }
+
+    // 发送 HTTP 响应头
     QByteArray head = "HTTP/1.1 200 OK\r\n";
     head += "Content-Type: application/octet-stream\r\n";
-    head += "Content-Length: " + QByteArray::number(file.size()) + "\r\n";
+    head += "Content-Length: " + QByteArray::number(file->size()) + "\r\n";
     head += "Content-Disposition: attachment; filename=\"" + QFileInfo(filePath).fileName().toUtf8() + "\"\r\n";
     head += "Connection: close\r\n\r\n";
     socket->write(head);
-    const qint64 CHUNK_SIZE = 128 * 1024; // 128KB
-    QByteArray buffer;
-    while (!file.atEnd()) {
-        buffer = file.read(CHUNK_SIZE);
-        if (buffer.isEmpty()) break;
-        qint64 written = socket->write(buffer);
-        if (written != buffer.size()) break;
-        if (socket->state() != QAbstractSocket::ConnectedState) break;
+
+    // 创建发送上下文
+    SendContext ctx;
+    ctx.file = file;
+    ctx.total = file->size();
+    ctx.sent = 0;
+    m_sendContexts.insert(socket, ctx);
+
+    // 开始发送第一块数据
+    startNextChunk(socket);
+}
+
+void HttpFileServer::startNextChunk(QTcpSocket *socket) {
+    if (!m_sendContexts.contains(socket)) return;
+    SendContext &ctx = m_sendContexts[socket];
+    if (ctx.sent >= ctx.total) return;
+
+    const qint64 CHUNK_SIZE = 1024 * 1024; // 1MB
+    qint64 remaining = ctx.total - ctx.sent;
+    qint64 toRead = qMin(CHUNK_SIZE, remaining);
+
+    QByteArray buffer = ctx.file->read(toRead);
+    if (buffer.isEmpty()) {
+        ctx.file->close();
+        delete ctx.file;
+        ctx.file = nullptr;
+        m_sendContexts.remove(socket);
+        socket->disconnectFromHost();
+        return;
     }
-    file.close();
-    socket->disconnectFromHost();
+
+    qint64 written = socket->write(buffer);
+    if (written != buffer.size()) {
+        qDebug() << "[HTTP] Write error: wrote" << written << "of" << buffer.size();
+        ctx.file->close();
+        delete ctx.file;
+        ctx.file = nullptr;
+        m_sendContexts.remove(socket);
+        socket->disconnectFromHost();
+        return;
+    }
+    ctx.sent += buffer.size();
+    if (ctx.sent < ctx.total) {
+        qDebug() << "[HTTP] Transfering... " << ctx.sent << "/" << ctx.total;
+    }
 }
 
 void HttpFileServer::sendError(QTcpSocket *socket, int code, const QString &msg) {
