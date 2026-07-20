@@ -16,10 +16,12 @@ set(SOURCES
     src/main.cpp
     src/FileTransfer.cpp
     src/WFTheader.cpp
+    src/httpFileServer.cpp
 )
 set(HEADERS
     src/FileTransfer.hpp
     src/WFTheader.hpp
+    src/httpFileServer.hpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
