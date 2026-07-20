@@ -69,18 +69,32 @@ All required DLLs (Qt core libraries, MinGW runtime, platforms/qwindows.dll, etc
 
 ## Usage Instructions
 ### Start a server
+<<<<<<< HEAD
 Launch the program and click Start Server.
+=======
+Open the program and click Start Server.
+>>>>>>> 85b275eea7541bb8a1f209d9e62749a2c668f330
 
 Freely configure the port (default 8888) and maximum number of connections (default 4).
 
 The console will print all IPv4 addresses of the local machine for clients to connect to.
 
+<<<<<<< HEAD
 WFT mode is active by default; click Start HTTP Server to switch to HTTP mode.
+=======
+### Connect as a client
+Click Connect as Client, enter the server's IP address and port (freely configurable).
+>>>>>>> 85b275eea7541bb8a1f209d9e62749a2c668f330
 
 ### Connect as a client
 Click Connect as Client, enter the server IP address and port (freely configurable).
 
+<<<<<<< HEAD
 After successful connection, the Select & Send File button becomes active.
+=======
+### Send a file
+Click Select & Send File and choose the file you want to send.
+>>>>>>> 85b275eea7541bb8a1f209d9e62749a2c668f330
 
 Only available in WFT mode.
 
@@ -97,8 +111,13 @@ Transfer progress is displayed on the console.
 
 Files are sent sequentially; sending again before the previous transfer finishes will be rejected.
 
+<<<<<<< HEAD
 #### 2. HTTP Mode
 Click Select & Send File and choose the shared folder.
+=======
+### Receive a file
+Both the server and client can automatically receive files.
+>>>>>>> 85b275eea7541bb8a1f209d9e62749a2c668f330
 
 ### Receive a file
 
@@ -111,6 +130,7 @@ During transfer, .WFTMP temporary files and .META metadata files are generated:
 
 .WFTMP: stores raw data chunks received.
 
+<<<<<<< HEAD
 .META: reserved for future resume support (currently only records header info and is automatically deleted after transfer completes).
 
 After completion, .WFTMP is renamed to the final file, and .META is removed.
@@ -122,6 +142,8 @@ Click a file name to start downloading.
 
 The downloaded file is saved according to your browser settings, keeping the original filename.
 
+=======
+>>>>>>> 85b275eea7541bb8a1f209d9e62749a2c668f330
 ## Frequently Asked Questions
 ### Error "Unable to find the Qt platform plugin" when starting
 Make sure platforms/qwindows.dll is in the same directory as the executable. CMake is configured to run windeployqt automatically, so this issue should not occur under normal circumstances.
